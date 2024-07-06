@@ -6,14 +6,12 @@ import {
   List,
   ListItem,
 } from "@ui-kitten/components";
-import { StyleSheet } from "react-native";
 
 import { useEffect, useState } from "react";
 
-import winkNLP from "wink-nlp";
-import model from "wink-eng-lite-web-model";
-import BM25Vectorizer from "wink-nlp/utilities/bm25-vectorizer";
 import { HNSW } from "hnsw";
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-react-native";
 
 type Movie = {
   id: number;
@@ -63,6 +61,12 @@ const movies: Movie[] = [
     title: "The Fly",
     synopsis: "A brilliant but eccentric scientist begins to transform",
   },
+  {
+    id: 8,
+    title: "The Godfather",
+    synopsis:
+      "The aging patriarch of an organized crime dynasty transfers control of his clandestine empire to his reluctant son.",
+  },
 ];
 
 async function buildIndex<
@@ -72,38 +76,34 @@ async function buildIndex<
     synopsis: string;
   }
 >(docs: T[]) {
-  const nlp = winkNLP(model);
-  const its = nlp.its;
+  console.log("Building index");
+  await tf.ready();
+  const use = require("@tensorflow-models/universal-sentence-encoder");
+  const model = await use.load();
 
-  const bm25 = BM25Vectorizer();
-  for (const d of docs) {
-    bm25.learn(
-      nlp.readDoc(`${d.title} ${docs.synopsis}`).tokens().out(its.normal)
-    );
+  const embeddingsTensor = await model.embed(docs.map((d) => d.synopsis));
+  const embeddings = embeddingsTensor.arraySync();
+
+  const hnsw = new HNSW(200, 16, 512, "cosine");
+
+  const data = [];
+  for (const docIndex in docs) {
+    const doc = docs[docIndex];
+    const vector = embeddings[docIndex];
+    data.push({ id: doc.id, vector });
   }
 
-  const data: {
-    id: number;
-    vector: number[];
-  }[] = [];
-  for (const d of docs) {
-    data.push({
-      id: d.id,
-      vector: bm25.vectorOf(nlp.readDoc(d.title).tokens().out(its.normal)),
-    });
-    data.push({
-      id: d.id,
-      vector: bm25.vectorOf(nlp.readDoc(d.synopsis).tokens().out(its.normal)),
-    });
-  }
-  const hnsw = new HNSW(200, 16, data[0].vector.length, "cosine");
   await hnsw.buildIndex(data);
 
   return {
-    query: (q: string, n: number = 3): T[] => {
-      const vector = bm25.vectorOf(nlp.readDoc(q).tokens().out(its.normal));
+    query: async (q: string, n: number = 3): Promise<T[]> => {
+      if (q.trim() === "") return [];
+      const queryTensor = await model.embed([q]);
+      const vector = queryTensor.arraySync()[0];
       const found = hnsw.searchKNN(vector, n);
-      return found.map((f) => movies.find((m) => m.id === f.id)) as T[];
+      const sorted = found.sort((a, b) => (a.score > b.score ? -1 : 1));
+      console.log(sorted);
+      return sorted.map((f) => movies.find((m) => m.id === f.id)) as T[];
     },
   };
 }
@@ -116,7 +116,7 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       const { query } = await index;
-      setResults(query(search));
+      setResults(await query(search));
     })();
   }, [search]);
 
