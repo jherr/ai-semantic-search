@@ -1,4 +1,12 @@
-import { Layout, Text, Input, Card } from "@ui-kitten/components";
+import {
+  Layout,
+  Text,
+  Input,
+  Divider,
+  List,
+  ListItem,
+} from "@ui-kitten/components";
+import { StyleSheet } from "react-native";
 
 import { useEffect, useState } from "react";
 
@@ -7,7 +15,13 @@ import model from "wink-eng-lite-web-model";
 import BM25Vectorizer from "wink-nlp/utilities/bm25-vectorizer";
 import { HNSW } from "hnsw";
 
-const movies = [
+type Movie = {
+  id: number;
+  title: string;
+  synopsis: string;
+};
+
+const movies: Movie[] = [
   {
     id: 1,
     title: "Aliens",
@@ -106,6 +120,15 @@ export default function HomeScreen() {
     })();
   }, [search]);
 
+  const renderItem = ({
+    item,
+  }: {
+    item: Movie;
+    index: number;
+  }): React.ReactElement => (
+    <ListItem title={item.title} description={item.synopsis} />
+  );
+
   return (
     <Layout
       style={{
@@ -118,17 +141,12 @@ export default function HomeScreen() {
     >
       <Text category="h1">Search</Text>
       <Input placeholder="Search" value={search} onChangeText={setSearch} />
-      {results.map((m) => (
-        <Card
-          key={m.id}
-          style={{
-            marginTop: 10,
-          }}
-        >
-          <Text category="h6">{m.title}</Text>
-          <Text>{m.synopsis}</Text>
-        </Card>
-      ))}
+      <List
+        style={{ maxHeight: 500, width: "100%" }}
+        data={results}
+        ItemSeparatorComponent={Divider}
+        renderItem={renderItem}
+      />
     </Layout>
   );
 }
