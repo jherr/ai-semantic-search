@@ -1,58 +1,110 @@
-import { Layout, Text, Input } from "@ui-kitten/components";
+import { Layout, Text, Input, Card } from "@ui-kitten/components";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import winkNLP from "wink-nlp";
 import model from "wink-eng-lite-web-model";
 import BM25Vectorizer from "wink-nlp/utilities/bm25-vectorizer";
 import { HNSW } from "hnsw";
 
-const hnsw = new HNSW(200, 16, 5, "cosine");
-const data = [
-  { id: 1, vector: [1, 2, 3, 4, 5] },
-  { id: 2, vector: [2, 3, 4, 5, 6] },
-  { id: 3, vector: [3, 4, 5, 6, 7] },
-  { id: 4, vector: [4, 5, 6, 7, 8] },
-  { id: 5, vector: [5, 6, 7, 8, 9] },
+const movies = [
+  {
+    id: 1,
+    title: "Aliens",
+    synopsis:
+      "Ripley, the sole survivor of the Nostromo's deadly encounter with the monstrous Alien, returns to Earth after drifting through space in hypersleep for 57 years. Although her story is initially met with skepticism, she agrees to accompany a team of Colonial Marines back to LV-426.",
+  },
+  {
+    id: 2,
+    title: "The Terminator",
+    synopsis:
+      "In the post-apocalyptic future, reigning tyrannical supercomputers teleport a cyborg assassin known as the 'Terminator' back to 1984 to kill Sarah Connor, whose unborn son is destined to lead insurgents against 21st-century mechanical hegemony. Meanwhile, the human-resistance movement dispatches a lone warrior to safeguard Sarah.",
+  },
+  {
+    id: 3,
+    title: "Alien",
+    synopsis:
+      "During its return to the earth, commercial spaceship Nostromo intercepts a distress signal from a distant planet. When a three-member team of the crew discovers a chamber containing thousands of eggs on the planet, a creature inside one of the eggs attacks an explorer. The entire crew is unaware of the impending nightmare set to descend upon them when the alien parasite planted inside its unfortunate host is birthed.",
+  },
+  {
+    id: 4,
+    title: "The Matrix",
+    synopsis:
+      "Set in the 22nd century, The Matrix tells the story of a computer hacker who joins a group of underground insurgents fighting the vast and powerful computers who now rule the earth.",
+  },
+  {
+    id: 5,
+    title: "The Thing",
+    synopsis:
+      "Scientists in the Antarctic are confronted by a shape-shifting alien that assumes the appearance of the people that it kills.",
+  },
+  {
+    id: 6,
+    title: "Blade Runner",
+    synopsis:
+      "In the smog-choked dystopian Los Angeles of 2019, blade runner Rick Deckard is called out of retirement to terminate a quartet of replicants who have escaped to Earth seeking their creator for a way to extend their short life spans.",
+  },
+  {
+    id: 7,
+    title: "The Fly",
+    synopsis: "A brilliant but eccentric scientist begins to transform",
+  },
 ];
 
-hnsw.buildIndex(data).then(() => {
-  const results = hnsw.searchKNN([6, 7, 8, 9, 10], 2);
-  console.log(results);
-});
+async function buildIndex<
+  T extends {
+    id: number;
+    title: string;
+    synopsis: string;
+  }
+>(docs: T[]) {
+  const nlp = winkNLP(model);
+  const its = nlp.its;
 
-const nlp = winkNLP(model);
-const its = nlp.its;
+  const bm25 = BM25Vectorizer();
+  for (const d of docs) {
+    bm25.learn(
+      nlp.readDoc(`${d.title} ${docs.synopsis}`).tokens().out(its.normal)
+    );
+  }
+
+  const data: {
+    id: number;
+    vector: number[];
+  }[] = [];
+  for (const d of docs) {
+    data.push({
+      id: d.id,
+      vector: bm25.vectorOf(nlp.readDoc(d.title).tokens().out(its.normal)),
+    });
+    data.push({
+      id: d.id,
+      vector: bm25.vectorOf(nlp.readDoc(d.synopsis).tokens().out(its.normal)),
+    });
+  }
+  const hnsw = new HNSW(200, 16, data[0].vector.length, "cosine");
+  await hnsw.buildIndex(data);
+
+  return {
+    query: (q: string, n: number = 3): T[] => {
+      const vector = bm25.vectorOf(nlp.readDoc(q).tokens().out(its.normal));
+      const found = hnsw.searchKNN(vector, n);
+      return found.map((f) => movies.find((m) => m.id === f.id)) as T[];
+    },
+  };
+}
+
+const index = buildIndex(movies);
 
 export default function HomeScreen() {
+  const [search, setSearch] = useState("Alien");
+  const [results, setResults] = useState<(typeof movies)[number][]>([]);
   useEffect(() => {
     (async () => {
-      const bm25 = BM25Vectorizer();
-      const corpus = [
-        "Bach",
-        "J Bach",
-        "Johann S Bach",
-        "Johann Sebastian Bach",
-        "Mozart",
-        "Amadeus Mozart",
-        "Beethoven",
-      ];
-      corpus.forEach((doc) =>
-        bm25.learn(nlp.readDoc(doc).tokens().out(its.normal))
-      );
-      // bm25.consolidate();
-
-      console.log(
-        bm25.vectorOf(
-          nlp.readDoc("Johann Bach symphony").tokens().out(its.normal)
-        )
-      );
-
-      console.log(
-        bm25.vectorOf(nlp.readDoc("Amadeus").tokens().out(its.normal))
-      );
+      const { query } = await index;
+      setResults(query(search));
     })();
-  }, []);
+  }, [search]);
 
   return (
     <Layout
@@ -64,8 +116,19 @@ export default function HomeScreen() {
         paddingTop: 50,
       }}
     >
-      <Text category="h1">HOME</Text>
-      <Input placeholder="Search" />
+      <Text category="h1">Search</Text>
+      <Input placeholder="Search" value={search} onChangeText={setSearch} />
+      {results.map((m) => (
+        <Card
+          key={m.id}
+          style={{
+            marginTop: 10,
+          }}
+        >
+          <Text category="h6">{m.title}</Text>
+          <Text>{m.synopsis}</Text>
+        </Card>
+      ))}
     </Layout>
   );
 }
