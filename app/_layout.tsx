@@ -13,6 +13,10 @@ import { ApplicationProvider } from "@ui-kitten/components";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 
+// import "react-native-polyfill-globals/auto";
+
+import "./globals";
+
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
