@@ -53,6 +53,7 @@
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "~0.19.10",
     "text-encoding": "^0.7.0",
+    "wink-embeddings-sg-100d": "^1.1.0",
     "wink-eng-lite-web-model": "^1.8.0",
     "wink-nlp": "^2.3.0"
   },

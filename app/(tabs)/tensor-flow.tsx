@@ -9,10 +9,9 @@ import {
 
 import { useEffect, useState } from "react";
 
-import winkNLP from "wink-nlp";
-import model from "wink-eng-lite-web-model";
-import BM25Vectorizer from "wink-nlp/utilities/bm25-vectorizer";
 import { HNSW } from "hnsw";
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-react-native";
 
 type Restaurant = {
   id: number;
@@ -78,71 +77,70 @@ async function buildIndex<
     synopsis: string;
   }
 >(docs: T[]) {
-  const nlp = winkNLP(model, ["pos"]);
-  const its = nlp.its;
+  const tensorFlowStartup = Date.now();
+  await tf.ready();
+  console.log(`tensorFlowStartup: ${Date.now() - tensorFlowStartup}ms`);
 
-  const bm25 = BM25Vectorizer();
-  for (const d of docs) {
-    bm25.learn(
-      nlp
-        .readDoc(`${d.title} ${d.synopsis}`)
-        .tokens()
-        .filter((t) => t.out(its.type) !== "punctuation")
-        .out(its.normal)
-    );
-  }
+  const loadEncoder = Date.now();
+  const use = require("@tensorflow-models/universal-sentence-encoder");
+  const model = await use.load();
+  console.log(`loadEncoder: ${Date.now() - loadEncoder}ms`);
 
-  const data: {
-    id: number;
-    vector: number[];
-  }[] = [];
-  for (const d of docs) {
-    data.push({
-      id: d.id,
-      vector: bm25.vectorOf(
-        nlp
-          .readDoc(d.title)
-          .tokens()
-          .filter((t) => t.out(its.type) !== "punctuation")
-          .out(its.normal)
-      ),
-    });
-    data.push({
-      id: d.id,
-      vector: bm25.vectorOf(
-        nlp
-          .readDoc(d.synopsis)
-          .tokens()
-          .filter((t) => t.out(its.type) !== "punctuation")
-          .out(its.normal)
-      ),
-    });
+  const createDocs = Date.now();
+  const docsById = docs.reduce((acc, doc) => {
+    acc[doc.id] = doc;
+    return acc;
+  }, {} as Record<number, T>);
+  console.log(`createDocs: ${Date.now() - createDocs}ms`);
+
+  const createEmbeddings = Date.now();
+  const embeddingsTensor = await model.embed(
+    docs.map((d) => `${d.title} ${d.synopsis}`)
+  );
+  const embeddings = embeddingsTensor.arraySync();
+  console.log(`createEmbeddings: ${Date.now() - createEmbeddings}ms`);
+
+  const createTreeData = Date.now();
+  const data = [];
+  for (const docIndex in docs) {
+    const doc = docs[docIndex];
+    const vector = embeddings[docIndex];
+    data.push({ id: doc.id, vector });
   }
-  const hnsw = new HNSW(200, 16, data[0].vector.length, "cosine");
+  console.log(`createTreeData: ${Date.now() - createTreeData}ms`);
+
+  const createHSNW = Date.now();
+  const hnsw = new HNSW(200, 16, 512, "cosine");
   await hnsw.buildIndex(data);
+  console.log(`createHSNW: ${Date.now() - createHSNW}ms`);
 
   return {
-    query: (q: string, n: number = 3): T[] => {
-      const vector = bm25.vectorOf(
-        nlp
-          .readDoc(q)
-          .tokens()
-          .filter((t) => t.out(its.type) !== "punctuation")
-          .out(its.normal)
-      );
+    query: async (q: string, n: number = 3): Promise<T[]> => {
+      if (q.trim() === "") return [];
+      const queryEmbed = Date.now();
+      const queryTensor = await model.embed([q]);
+      const vector = queryTensor.arraySync()[0];
+      console.log(`queryEmbed: ${Date.now() - queryEmbed}ms`);
+
+      const searchKNN = Date.now();
       const found = hnsw.searchKNN(vector, n);
-      return found.map((f) => docs.find((m) => m.id === f.id)) as T[];
+      console.log(`searchKNN: ${Date.now() - searchKNN}ms`);
+
+      const sorted = found.sort((a, b) => (a.score > b.score ? -1 : 1));
+      console.log(sorted);
+      return sorted.map((f) => docsById[f.id]) as T[];
     },
   };
 }
 
-const index = buildIndex(restaurants);
+let index: ReturnType<typeof buildIndex<Restaurant>> | null = null;
 
 export default function HomeScreen() {
-  const [search, setSearch] = useState("mexican food");
+  const [search, setSearch] = useState("latin");
   const [results, setResults] = useState<Restaurant[]>([]);
   useEffect(() => {
     (async () => {
+      if (!index) index = buildIndex(restaurants);
       const { query } = await index;
       setResults(await query(search));
     })();

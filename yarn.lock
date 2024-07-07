@@ -8714,6 +8714,11 @@ which@^2.0.1:
   dependencies:
     isexe "^2.0.0"
 
+wink-embeddings-sg-100d@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/wink-embeddings-sg-100d/-/wink-embeddings-sg-100d-1.1.0.tgz#466bd0d180db48ab6a239f59cf2b9d8f48f631c7"
+  integrity sha512-SN/Ar/UzotWhkJiSQ+WUN/L+UCKvNU1sYgUlFzJv5QpC2qg14txpGafTxVJAEepZp4hbj2CBIhei2VT4FK4/OA==
+
 wink-eng-lite-web-model@^1.8.0:
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/wink-eng-lite-web-model/-/wink-eng-lite-web-model-1.8.0.tgz#194530f4d2da4ac8d696c4b6582e38114b545bd6"
