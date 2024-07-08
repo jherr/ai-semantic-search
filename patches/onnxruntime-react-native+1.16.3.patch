@@ -1,0 +1,18 @@
+diff --git a/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/TensorHelper.java b/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/TensorHelper.java
+index d9c2e3b..da46a22 100644
+--- a/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/TensorHelper.java
++++ b/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/TensorHelper.java
+@@ -113,10 +113,10 @@ public class TensorHelper {
+ 
+       // data
+       if (onnxTensor.getInfo().onnxType == TensorInfo.OnnxTensorType.ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING) {
+-        String[] buffer = (String[])onnxTensor.getValue();
++        String[][] buffer = (String[][])onnxTensor.getValue();
+         WritableArray dataArray = Arguments.createArray();
+-        for (String value : buffer) {
+-          dataArray.pushString(value);
++        for (String[] value : buffer) {
++          dataArray.pushString(value[0]);
+         }
+         outputTensor.putArray("data", dataArray);
+       } else {
