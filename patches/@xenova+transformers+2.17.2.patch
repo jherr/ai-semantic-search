@@ -1,0 +1,28 @@
+diff --git a/node_modules/@xenova/transformers/src/env.js b/node_modules/@xenova/transformers/src/env.js
+index 92fb076..6b6fdd8 100644
+--- a/node_modules/@xenova/transformers/src/env.js
++++ b/node_modules/@xenova/transformers/src/env.js
+@@ -38,9 +38,7 @@ const PATH_AVAILABLE = !isEmpty(path); // check if path is available
+ 
+ const RUNNING_LOCALLY = FS_AVAILABLE && PATH_AVAILABLE;
+ 
+-const __dirname = RUNNING_LOCALLY
+-    ? path.dirname(path.dirname(url.fileURLToPath(import.meta.url)))
+-    : './';
++const __dirname = './';
+ 
+ // Only used for environments with access to file system
+ const DEFAULT_CACHE_DIR = RUNNING_LOCALLY
+diff --git a/node_modules/@xenova/transformers/src/tokenizers.js b/node_modules/@xenova/transformers/src/tokenizers.js
+index 234eef1..01e1376 100644
+--- a/node_modules/@xenova/transformers/src/tokenizers.js
++++ b/node_modules/@xenova/transformers/src/tokenizers.js
+@@ -1370,7 +1370,7 @@ class BertPreTokenizer extends PreTokenizer {
+         // Construct a pattern which matches the rust implementation:
+         // https://github.com/huggingface/tokenizers/blob/b4fcc9ce6e4ad5806e82826f816acfdfdc4fcc67/tokenizers/src/pre_tokenizers/bert.rs#L11
+         // Equivalent to removing whitespace and splitting on punctuation (both \p{P} and other ascii characters)
+-        this.pattern = new RegExp(`[^\\s${PUNCTUATION_REGEX}]+|[${PUNCTUATION_REGEX}]`, 'gu');
++        this.pattern = /[A-Za-z]+/g;
+     }
+     /**
+      * Tokenizes a single text using the BERT pre-tokenization scheme.
