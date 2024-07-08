@@ -9,7 +9,6 @@ import {
   ListItem,
 } from "@ui-kitten/components";
 
-import * as tf from "@tensorflow/tfjs";
 import { HNSW } from "hnsw";
 import { InferenceSession, Tensor } from "onnxruntime-react-native";
 import { Asset } from "expo-asset";
@@ -24,7 +23,6 @@ async function buildIndex<
     synopsis: string;
   }
 >(docs: T[]) {
-  await tf.ready();
   const modelPath = require("./Snowflake.onnx");
   const assets = await Asset.loadAsync(modelPath);
   const modelUri = assets[0].localUri;
@@ -34,25 +32,34 @@ async function buildIndex<
   const options = require("./tokenizer_config.json");
   const tokenizer = new PreTrainedTokenizer(config, options);
 
-  const gap = tf.layers.globalAveragePooling1d({});
-
   async function getEmbedding(input: string) {
-    const { input_ids, attention_mask } = tokenizer(input);
+    try {
+      const { input_ids, attention_mask } = tokenizer(input);
 
-    const { last_hidden_state } = await session.run({
-      input_ids: input_ids,
-      attention_mask: attention_mask,
-      token_type_ids: new Tensor(
-        "int64",
-        new BigInt64Array(input_ids.dims[1]),
-        input_ids.dims
-      ),
-    });
+      const { last_hidden_state } = await session.run({
+        input_ids: input_ids,
+        attention_mask: attention_mask,
+        token_type_ids: new Tensor(
+          "int64",
+          new BigInt64Array(input_ids.dims[1]),
+          input_ids.dims
+        ),
+      });
 
-    const pooled = gap
-      .apply(tf.tensor(last_hidden_state.cpuData, last_hidden_state.dims))
-      .arraySync() as number[];
-    return pooled[0];
+      const vectorSize = last_hidden_state.dims[2];
+      const average = new Array(vectorSize).fill(0);
+      for (const index in last_hidden_state.cpuData) {
+        average[+index % vectorSize] += last_hidden_state.cpuData[index];
+      }
+      const sequenceSize = last_hidden_state.dims[1];
+      for (const index in average) {
+        average[index] /= sequenceSize;
+      }
+      return average;
+    } catch (e) {
+      console.log(e);
+      return [];
+    }
   }
 
   const data = [];
