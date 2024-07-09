@@ -8,13 +8,29 @@ import {
   List,
   ListItem,
 } from "@ui-kitten/components";
+import { Asset } from "expo-asset";
 
-import winkNLP from "wink-nlp";
-import model from "wink-eng-lite-web-model";
-import BM25Vectorizer from "wink-nlp/utilities/bm25-vectorizer";
 import { HNSW } from "hnsw";
+import { InferenceSession, Tensor } from "onnxruntime-react-native";
+import { PreTrainedTokenizer } from "@xenova/transformers/src/tokenizers";
 
 import { Restaurant, restaurants } from "@/src/restaurants";
+
+// THe hidden state of the model is a 3D tensor with dimensions [batch_size, sequence_length, vector_size]
+// Because we only send in one sequence at a time, the batch size is 1
+// We want to average the hidden states across the sequence length to get a single vector
+function globalAverage(data: number[], dims: number[]) {
+  const vectorSize = dims[2];
+  const average = new Array(vectorSize).fill(0);
+  for (const index in data) {
+    average[+index % vectorSize] += data[index];
+  }
+  const sequenceSize = dims[1];
+  for (const index in average) {
+    average[index] /= sequenceSize;
+  }
+  return average;
+}
 
 async function buildIndex<
   T extends {
@@ -23,60 +39,66 @@ async function buildIndex<
     synopsis: string;
   }
 >(docs: T[]) {
-  const nlp = winkNLP(model, ["pos"]);
-  const its = nlp.its;
+  // Load up the ONNX embedding model
+  const modelPath = require("../../assets/Snowflake.onnx");
+  const assets = await Asset.loadAsync(modelPath);
+  const modelUri = assets[0].localUri;
+  const session = await InferenceSession.create(modelUri!);
 
-  const bm25 = BM25Vectorizer();
-  for (const d of docs) {
-    bm25.learn(
-      nlp
-        .readDoc(`${d.title} ${d.synopsis}`)
-        .tokens()
-        .filter((t) => t.out(its.type) !== "punctuation")
-        .out(its.normal)
-    );
-  }
+  // Configure the tokenizer with the configuration that is synced with the model
+  const config = require("../../assets/tokenizer.json");
+  const options = require("../../assets/tokenizer_config.json");
+  const tokenizer = new PreTrainedTokenizer(config, options);
 
-  const data: {
-    id: number;
-    vector: number[];
-  }[] = [];
-  for (const d of docs) {
-    data.push({
-      id: d.id,
-      vector: bm25.vectorOf(
-        nlp
-          .readDoc(d.title)
-          .tokens()
-          .filter((t) => t.out(its.type) !== "punctuation")
-          .out(its.normal)
+  async function getEmbedding(input: string) {
+    // Convert the text into tensors that the model can understand
+    const { input_ids, attention_mask } = tokenizer(input);
+
+    // Run the model with the tensors
+    const { last_hidden_state } = await session.run({
+      input_ids: input_ids,
+      attention_mask: attention_mask,
+      token_type_ids: new Tensor(
+        "int64",
+        new BigInt64Array(input_ids.dims[1]),
+        input_ids.dims
       ),
     });
+
+    // Take the average of the last hidden state to get the embedding
+    return globalAverage(last_hidden_state.cpuData, last_hidden_state.dims);
+  }
+
+  // Create an array of vectors for the HNSW index
+  const data = [];
+  for (const restaurant of restaurants) {
     data.push({
-      id: d.id,
-      vector: bm25.vectorOf(
-        nlp
-          .readDoc(d.synopsis)
-          .tokens()
-          .filter((t) => t.out(its.type) !== "punctuation")
-          .out(its.normal)
-      ),
+      id: restaurant.id,
+      vector: await getEmbedding(restaurant.title),
+    });
+    data.push({
+      id: restaurant.id,
+      vector: await getEmbedding(restaurant.synopsis),
     });
   }
-  const hnsw = new HNSW(200, 16, data[0].vector.length, "cosine");
+
+  // Build the index
+  const hnsw = new HNSW(200, 16, 384, "cosine");
   await hnsw.buildIndex(data);
 
   return {
-    query: (q: string, n: number = 3): T[] => {
-      const vector = bm25.vectorOf(
-        nlp
-          .readDoc(q)
-          .tokens()
-          .filter((t) => t.out(its.type) !== "punctuation")
-          .out(its.normal)
-      );
-      const found = hnsw.searchKNN(vector, n);
-      return found.map((f) => docs.find((m) => m.id === f.id)) as T[];
+    query: async (q: string, n: number = 3): Promise<T[]> => {
+      // Vectorize the query
+      const vector = await getEmbedding(q);
+
+      // Search the index for that vector
+      const found = hnsw.searchKNN(vector, 20);
+
+      // Sort the results by score and return the top n
+      const sorted = found.sort((a, b) => b.score - a.score).slice(0, n);
+
+      // Return the documents that match the ids
+      return sorted.map((f) => docs.find((m) => m.id === f.id)) as T[];
     },
   };
 }
@@ -84,7 +106,7 @@ async function buildIndex<
 const index = buildIndex(restaurants);
 
 export default function HomeScreen() {
-  const [search, setSearch] = useState("mexican food");
+  const [search, setSearch] = useState("asian fusion");
   const [results, setResults] = useState<Restaurant[]>([]);
   useEffect(() => {
     (async () => {
