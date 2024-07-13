@@ -87,7 +87,7 @@ async function buildIndex<
   await hnsw.buildIndex(data);
 
   return {
-    query: async (q: string, n: number = 3): Promise<T[]> => {
+    query: async (q: string, n: number = 5): Promise<T[]> => {
       // Vectorize the query
       const vector = await getEmbedding(q);
 
@@ -137,7 +137,7 @@ export default function HomeScreen() {
       <Text category="h1">Search</Text>
       <Input placeholder="Search" value={search} onChangeText={setSearch} />
       <List
-        style={{ maxHeight: 500, width: "100%" }}
+        style={{ maxHeight: 1200, width: "100%" }}
         data={results}
         ItemSeparatorComponent={Divider}
         renderItem={renderItem}
