@@ -20,7 +20,7 @@ async function buildIndex() {
   const modelUri = assets[0].localUri;
   const session = await InferenceSession.create(modelUri!);
 
-  async function getEmbedding(input: string) {
+  async function createEmbedding(input: string) {
     // Convert the text into tensors that the model can understand
     const { input_ids, attention_mask } = tokenizer(input);
 
@@ -40,7 +40,7 @@ async function buildIndex() {
   for (const r of restaurants) {
     rows.push({
       id: r.id,
-      vector: await getEmbedding(r.description),
+      vector: await createEmbedding(r.description),
     });
   }
 
@@ -48,17 +48,17 @@ async function buildIndex() {
   const hnsw = new HNSW(200, 16, rows[0].vector.length, "cosine");
   await hnsw.buildIndex(rows);
 
-  return { hnsw, getEmbedding };
+  return { hnsw, createEmbedding };
 }
 
 const index = buildIndex();
 
 export async function searchRestaurants(q: string, n: number = 5) {
   // Get the inference session and the index
-  const { getEmbedding, hnsw } = await index;
+  const { createEmbedding, hnsw } = await index;
 
   // Vectorize the query
-  const vector = await getEmbedding(q);
+  const vector = await createEmbedding(q);
 
   // Search the index for that vector
   const found = hnsw.searchKNN(vector, n * 4);
