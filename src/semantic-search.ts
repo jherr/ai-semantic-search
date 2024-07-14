@@ -1,6 +1,6 @@
 import { Asset } from "expo-asset";
 import { HNSW } from "hnsw";
-import { InferenceSession, Tensor } from "onnxruntime-react-native";
+import { InferenceSession } from "onnxruntime-react-native";
 import { PreTrainedTokenizer } from "@xenova/transformers/src/tokenizers";
 
 import { restaurants } from "@/src/restaurants";
@@ -15,10 +15,8 @@ const tokenizer = new PreTrainedTokenizer(tConfig, tOptions);
 // Create an embedding function and an HNSW index of restaurants
 async function buildIndex() {
   // Load up the ONNX embedding model
-  const modelPath = require("./Snowflake.onnx");
-  const assets = await Asset.loadAsync(modelPath);
-  const modelUri = assets[0].localUri;
-  const session = await InferenceSession.create(modelUri!);
+  const assets = await Asset.loadAsync(require("./Snowflake.onnx"));
+  const session = await InferenceSession.create(assets[0].localUri!);
 
   async function createEmbedding(input: string) {
     // Convert the text into tensors that the model can understand
