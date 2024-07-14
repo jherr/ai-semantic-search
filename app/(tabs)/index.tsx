@@ -9,7 +9,7 @@ import {
   ListItem,
 } from "@ui-kitten/components";
 
-import { Restaurant, restaurants } from "@/src/restaurants";
+import { Restaurant } from "@/src/restaurants";
 
 import { searchRestaurants } from "@/src/semantic-search";
 
